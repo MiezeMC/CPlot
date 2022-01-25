@@ -1,8 +1,9 @@
-name: CPlot
+name: CPlot-MMC
 main: ColinHDev\CPlot\CPlot
 version: "0.0.0"
 
 api: 4.0.0
+load: STARTUP
 
 author: ColinHDev
 website: https://github.com/ColinHDev
