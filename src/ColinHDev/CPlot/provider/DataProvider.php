@@ -226,7 +226,7 @@ final class DataProvider {
         );
     }
 
-    public function setPlayerSetting(PlayerData $playerData, BaseAttribute $setting) : \Generator {
+    public function savePlayerSetting(PlayerData $playerData, BaseAttribute $setting) : \Generator {
         $playerUUID = $playerData->getPlayerUUID();
         yield $this->database->asyncInsert(
             self::SET_PLAYERSETTING,
@@ -297,6 +297,7 @@ final class DataProvider {
             self::SET_WORLD,
             [
                 "worldName" => $worldName,
+                "worldType" => $worldSettings->getWorldType(),
                 "roadSchematic" => $worldSettings->getRoadSchematic(),
                 "mergeRoadSchematic" => $worldSettings->getMergeRoadSchematic(),
                 "plotSchematic" => $worldSettings->getPlotSchematic(),
