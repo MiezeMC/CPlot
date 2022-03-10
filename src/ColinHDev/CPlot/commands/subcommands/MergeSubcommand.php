@@ -1,66 +1,74 @@
 <?php
 
+declare(strict_types=1);
+
 namespace ColinHDev\CPlot\commands\subcommands;
 
+use ColinHDev\CPlot\attributes\BooleanAttribute;
 use ColinHDev\CPlot\commands\Subcommand;
-use ColinHDev\CPlot\CPlot;
+use ColinHDev\CPlot\plots\BasePlot;
+use ColinHDev\CPlot\plots\flags\FlagIDs;
+use ColinHDev\CPlot\plots\Plot;
 use ColinHDev\CPlot\provider\DataProvider;
+use ColinHDev\CPlot\provider\EconomyManager;
 use ColinHDev\CPlot\provider\EconomyProvider;
+use ColinHDev\CPlot\provider\LanguageManager;
+use ColinHDev\CPlot\ResourceManager;
 use ColinHDev\CPlot\tasks\async\PlotMergeAsyncTask;
-use ColinHDev\CPlotAPI\attributes\BooleanAttribute;
-use ColinHDev\CPlotAPI\plots\BasePlot;
-use ColinHDev\CPlotAPI\plots\flags\FlagIDs;
-use ColinHDev\CPlotAPI\plots\Plot;
-use ColinHDev\CPlotAPI\worlds\WorldSettings;
+use ColinHDev\CPlot\worlds\WorldSettings;
 use pocketmine\command\CommandSender;
 use pocketmine\math\Facing;
 use pocketmine\player\Player;
 use pocketmine\Server;
-use poggit\libasynql\SqlError;
+use pocketmine\world\World;
 
+/**
+ * @phpstan-extends Subcommand<null>
+ */
 class MergeSubcommand extends Subcommand {
 
     public function execute(CommandSender $sender, array $args) : \Generator {
         if (!$sender instanceof Player) {
-            $sender->sendMessage($this->getPrefix() . $this->translateString("merge.senderNotOnline"));
-            return;
+            yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "merge.senderNotOnline"]);
+            return null;
         }
 
         $location = $sender->getLocation();
+        assert($location->world instanceof World);
         $worldName = $location->world->getFolderName();
-        $worldSettings = yield from DataProvider::getInstance()->awaitWorld($worldName);
+        $worldSettings = yield DataProvider::getInstance()->awaitWorld($worldName);
         if (!($worldSettings instanceof WorldSettings)) {
-            $sender->sendMessage($this->getPrefix() . $this->translateString("merge.noPlotWorld"));
-            return;
+            yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "merge.noPlotWorld"]);
+            return null;
         }
 
         $basePlot = BasePlot::fromVector3($worldName, $worldSettings, $location);
         $plot = null;
         if ($basePlot instanceof BasePlot) {
             /** @var Plot|null $plot */
-            $plot = yield from $basePlot->toAsyncPlot();
+            $plot = yield $basePlot->toAsyncPlot();
         }
         if ($basePlot === null || $plot === null) {
-            $sender->sendMessage($this->getPrefix() . $this->translateString("merge.noPlot"));
-            return;
+            yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "merge.noPlot"]);
+            return null;
         }
 
         if (!$plot->hasPlotOwner()) {
-            $sender->sendMessage($this->getPrefix() . $this->translateString("merge.noPlotOwner"));
-            return;
+            yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "merge.noPlotOwner"]);
+            return null;
         }
         if (!$sender->hasPermission("cplot.admin.merge")) {
-            if (!$plot->isPlotOwner($sender->getUniqueId()->getBytes())) {
-                $sender->sendMessage($this->getPrefix() . $this->translateString("merge.notPlotOwner"));
-                return;
+            if (!$plot->isPlotOwner($sender)) {
+                yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "merge.notPlotOwner"]);
+                return null;
             }
         }
 
         /** @var BooleanAttribute $flag */
         $flag = $plot->getFlagNonNullByID(FlagIDs::FLAG_SERVER_PLOT);
         if ($flag->getValue() === true) {
-            $sender->sendMessage($this->getPrefix() . $this->translateString("merge.serverPlotFlag", [$flag->getID()]));
-            return;
+            yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "merge.serverPlotFlag" => $flag->getID()]);
+            return null;
         }
 
         $rotation = ($location->yaw - 180) % 360;
@@ -75,95 +83,87 @@ class MergeSubcommand extends Subcommand {
         } else if (225 <= $rotation && $rotation < 315) {
             $direction = Facing::WEST;
         } else {
-            $sender->sendMessage($this->getPrefix() . $this->translateString("merge.processDirectionError"));
-            return;
+            yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "merge.processDirectionError"]);
+            return null;
         }
 
         /** @var BasePlot $basePlotToMerge */
         $basePlotToMerge = $basePlot->getSide($direction);
-        $plotToMerge = yield from $basePlotToMerge->toAsyncPlot();
-        if ($plotToMerge === null) {
-            $sender->sendMessage($this->getPrefix() . $this->translateString("merge.invalidSecondPlot"));
-            return;
+        $plotToMerge = yield $basePlotToMerge->toAsyncPlot();
+        if (!($plotToMerge instanceof Plot)) {
+            yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "merge.invalidSecondPlot"]);
+            return null;
         }
         if ($plot->isSame($plotToMerge)) {
-            $sender->sendMessage($this->getPrefix() . $this->translateString("merge.alreadyMerged"));
-            return;
+            yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "merge.alreadyMerged"]);
+            return null;
         }
 
         $hasSameOwner = false;
         foreach ($plotToMerge->getPlotOwners() as $plotOwner) {
-            if ($plot->isPlotOwner($plotOwner->getPlayerUUID())) {
+            if ($plot->isPlotOwner($plotOwner->getPlayerData())) {
                 $hasSameOwner = true;
                 break;
             }
         }
         if (!$hasSameOwner) {
-            $sender->sendMessage($this->getPrefix() . $this->translateString("merge.notSamePlotOwner"));
-            return;
+            yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "merge.notSamePlotOwner"]);
+            return null;
         }
 
         /** @var BooleanAttribute $flag */
         $flag = $plotToMerge->getFlagNonNullByID(FlagIDs::FLAG_SERVER_PLOT);
         if ($flag->getValue() === true) {
-            $sender->sendMessage($this->getPrefix() . $this->translateString("merge.secondPlotServerPlotFlag", [$flag->getID()]));
-            return;
+            yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "merge.secondPlotServerPlotFlag" => $flag->getID()]);
+            return null;
         }
 
-        $economyProvider = CPlot::getInstance()->getEconomyProvider();
-        if ($economyProvider !== null) {
-            $price = $economyProvider->getPrice(EconomyProvider::PRICE_MERGE) ?? 0.0;
+        $economyProvider = EconomyManager::getInstance()->getProvider();
+        if ($economyProvider instanceof EconomyProvider) {
+            $price = EconomyManager::getInstance()->getMergePrice();
             if ($price > 0.0) {
-                $money = $economyProvider->getMoney($sender);
-                if ($money === null) {
-                    $sender->sendMessage($this->getPrefix() . $this->translateString("merge.loadMoneyError"));
-                    return;
+                $money = yield $economyProvider->awaitMoney($sender);
+                if (!is_float($money)) {
+                    yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "merge.loadMoneyError"]);
+                    return null;
                 }
                 if ($money < $price) {
-                    $sender->sendMessage($this->getPrefix() . $this->translateString("merge.notEnoughMoney", [$economyProvider->getCurrency(), $economyProvider->parseMoneyToString($price), $economyProvider->parseMoneyToString($price - $money)]));
-                    return;
+                    yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "merge.senderNotOnline" => [$economyProvider->getCurrency(), $economyProvider->parseMoneyToString($price), $economyProvider->parseMoneyToString($price - $money)]]);
+                    return null;
                 }
-                if (!$economyProvider->removeMoney($sender, $price, "Paid " . $price . $economyProvider->getCurrency() . " to merge the plot " . $plot->toString() . " with the plot " . $plotToMerge->toString() . ".")) {
-                    $sender->sendMessage($this->getPrefix() . $this->translateString("merge.saveMoneyError"));
-                    return;
-                }
-                $sender->sendMessage($this->getPrefix() . $this->translateString("merge.chargedMoney", [$economyProvider->getCurrency(), $economyProvider->parseMoneyToString($price)]));
+                yield $economyProvider->awaitMoneyRemoval($sender, $price);
+                yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "merge.chargedMoney" => [$economyProvider->getCurrency(), $economyProvider->parseMoneyToString($price)]]);
             }
         }
 
-        $sender->sendMessage($this->getPrefix() . $this->translateString("merge.start"));
-        $task = new PlotMergeAsyncTask($worldSettings, $plot, $plotToMerge);
+        yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "merge.start"]);
         $world = $sender->getWorld();
-        $task->setWorld($world);
-        $task->setClosure(
-            function (int $elapsedTime, string $elapsedTimeString, array $result) use ($world, $sender) {
-                [$plotCount, $plots] = $result;
+        $task = new PlotMergeAsyncTask($world, $worldSettings, $plot, $plotToMerge);
+        $task->setCallback(
+            static function (int $elapsedTime, string $elapsedTimeString, mixed $result) use ($world, $plot, $sender) : void {
+                $plotCount = count($plot->getMergePlots()) + 1;
                 $plots = array_map(
                     static function (BasePlot $plot) : string {
                         return $plot->toSmallString();
                     },
-                    $plots
+                    array_merge([$plot], $plot->getMergePlots())
                 );
                 Server::getInstance()->getLogger()->debug(
                     "Merging plot" . ($plotCount > 1 ? "s" : "") . " in world " . $world->getDisplayName() . " (folder: " . $world->getFolderName() . ") took " . $elapsedTimeString . " (" . $elapsedTime . "ms) for player " . $sender->getUniqueId()->getBytes() . " (" . $sender->getName() . ") for " . $plotCount . " plot" . ($plotCount > 1 ? "s" : "") . ": [" . implode(", ", $plots) . "]."
                 );
-                if ($sender->isConnected()) {
-                    $sender->sendMessage($this->getPrefix() . $this->translateString("merge.finish", [$elapsedTimeString]));
-                }
+                LanguageManager::getInstance()->getProvider()->sendMessage($sender, ["prefix", "merge.finish" => $elapsedTimeString]);
             }
         );
-        yield from $plot->merge($plotToMerge);
-        yield from DataProvider::getInstance()->deletePlot($plotToMerge);
+        yield DataProvider::getInstance()->awaitPlotDeletion($plotToMerge);
+        yield $plot->merge($plotToMerge);
         Server::getInstance()->getAsyncPool()->submitTask($task);
+        return null;
     }
 
-    /**
-     * @param SqlError $error
-     */
-    public function onError(CommandSender $sender, mixed $error) : void {
+    public function onError(CommandSender $sender, \Throwable $error) : void {
         if ($sender instanceof Player && !$sender->isConnected()) {
             return;
         }
-        $sender->sendMessage($this->getPrefix() . $this->translateString("merge.deleteError", [$error->getMessage()]));
+        LanguageManager::getInstance()->getProvider()->sendMessage($sender, ["prefix", "merge.deleteError" => $error->getMessage()]);
     }
 }

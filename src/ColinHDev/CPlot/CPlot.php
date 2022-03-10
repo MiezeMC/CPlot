@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace ColinHDev\CPlot;
 
 use ColinHDev\CPlot\commands\PlotCommand;
@@ -9,23 +11,23 @@ use ColinHDev\CPlot\listener\BlockGrowListener;
 use ColinHDev\CPlot\listener\BlockPlaceListener;
 use ColinHDev\CPlot\listener\BlockSpreadListener;
 use ColinHDev\CPlot\listener\BlockTeleportListener;
+use ColinHDev\CPlot\listener\ChunkPopulateListener;
 use ColinHDev\CPlot\listener\EntityDamageByEntityListener;
 use ColinHDev\CPlot\listener\EntityExplodeListener;
 use ColinHDev\CPlot\listener\EntityItemPickupListener;
 use ColinHDev\CPlot\listener\EntityTrampleFarmlandListener;
 use ColinHDev\CPlot\listener\PlayerDropItemListener;
 use ColinHDev\CPlot\listener\PlayerInteractListener;
-use ColinHDev\CPlot\listener\PlayerMoveListener;
 use ColinHDev\CPlot\listener\PlayerLoginListener;
+use ColinHDev\CPlot\listener\PlayerMoveListener;
 use ColinHDev\CPlot\listener\StructureGrowListener;
-use ColinHDev\CPlot\provider\CEconomyProvider;
 use ColinHDev\CPlot\provider\DataProvider;
-use ColinHDev\CPlot\provider\EconomyProvider;
+use ColinHDev\CPlot\provider\EconomyManager;
 use ColinHDev\CPlot\tasks\EntityMovementTask;
+use ColinHDev\CPlot\worlds\generator\PlotGenerator;
+use ColinHDev\CPlot\worlds\generator\SchematicGenerator;
 use pocketmine\plugin\PluginBase;
 use pocketmine\world\generator\GeneratorManager;
-use ColinHDev\CPlot\worlds\PlotGenerator;
-use ColinHDev\CPlot\worlds\SchematicGenerator;
 
 class CPlot extends PluginBase {
 
@@ -35,26 +37,12 @@ class CPlot extends PluginBase {
         return self::$instance;
     }
 
-    private ?EconomyProvider $economyProvider;
-
-    public function getEconomyProvider() : ?EconomyProvider {
-        return $this->economyProvider;
-    }
-
     public function onLoad() : void {
         self::$instance = $this;
 
-        $config = ResourceManager::getInstance()->getConfig();
-        switch (strtolower($config->getNested("economy.provider", ""))) {
-            case "ceconomy":
-                $this->economyProvider = new CEconomyProvider($config->get("economy", []));
-                break;
-            default:
-                $this->economyProvider = null;
-                break;
-        }
-
+        ResourceManager::getInstance();
         DataProvider::getInstance();
+        EconomyManager::getInstance();
 
         GeneratorManager::getInstance()->addGenerator(PlotGenerator::class, PlotGenerator::GENERATOR_NAME, fn() => null, true);
         GeneratorManager::getInstance()->addGenerator(SchematicGenerator::class, SchematicGenerator::GENERATOR_NAME, fn() => null, true);
@@ -69,6 +57,7 @@ class CPlot extends PluginBase {
         $this->getServer()->getPluginManager()->registerEvents(new BlockPlaceListener(), $this);
         $this->getServer()->getPluginManager()->registerEvents(new BlockSpreadListener(), $this);
         $this->getServer()->getPluginManager()->registerEvents(new BlockTeleportListener(), $this);
+        $this->getServer()->getPluginManager()->registerEvents(new ChunkPopulateListener(), $this);
         $this->getServer()->getPluginManager()->registerEvents(new EntityDamageByEntityListener(), $this);
         $this->getServer()->getPluginManager()->registerEvents(new EntityExplodeListener(), $this);
         $this->getServer()->getPluginManager()->registerEvents(new EntityItemPickupListener(), $this);

@@ -1,9 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace ColinHDev\CPlot\commands;
 
+use ColinHDev\CPlot\provider\LanguageManager;
 use pocketmine\command\CommandSender;
-use ColinHDev\CPlot\ResourceManager;
 use poggit\libasynql\SqlError;
 
 /**
@@ -11,21 +13,24 @@ use poggit\libasynql\SqlError;
  */
 abstract class Subcommand {
 
+    private string $key;
     private string $name;
-    /** @var string[] */
+    /** @var array<string> */
     private array $alias;
-    private string $description;
-    private string $usage;
     private string $permission;
-    private string $permissionMessage;
 
-    public function __construct(array $commandData, string $permission) {
-        $this->name = $commandData["name"];
-        $this->alias = $commandData["alias"];
-        $this->description = $commandData["description"];
-        $this->usage = $commandData["usage"];
-        $this->permission = $permission;
-        $this->permissionMessage = $commandData["permissionMessage"];
+    /**
+     * @throws \JsonException
+     */
+    public function __construct(string $key) {
+        $this->key = $key;
+        $languageProvider = LanguageManager::getInstance()->getProvider();
+        $this->name = $languageProvider->translateString($key . ".name");
+        $alias = json_decode($languageProvider->translateString($key . ".alias"), true, 512, JSON_THROW_ON_ERROR);
+        assert(is_array($alias));
+        /** @phpstan-var array<string> $alias */
+        $this->alias = $alias;
+        $this->permission = "cplot.subcommand." . $key;
     }
 
     public function getName() : string {
@@ -39,41 +44,22 @@ abstract class Subcommand {
         return $this->alias;
     }
 
-    public function getDescription() : string {
-        return $this->description;
-    }
-
-    public function getUsage() : string {
-        return $this->usage;
-    }
-
     public function getPermission() : string {
         return $this->permission;
-    }
-
-    public function getPermissionMessage() : string {
-        return $this->permissionMessage;
-    }
-
-    protected function getPrefix() : string {
-        return ResourceManager::getInstance()->getPrefix();
-    }
-
-    protected function translateString(string $str, array $params = []) : string {
-        return ResourceManager::getInstance()->translateString($str, $params);
     }
 
     public function testPermission(CommandSender $sender) : bool {
         if ($sender->hasPermission($this->permission)) {
             return true;
         }
-        $sender->sendMessage($this->getPrefix() . $this->permissionMessage);
+        LanguageManager::getInstance()->getProvider()->sendMessage($sender, ["prefix", $this->key . ".permissionMessage"]);
         return false;
     }
 
     /**
      * This generator function contains the code you want to be executed when the command is run.
-     * @phpstan-return \Generator<mixed, mixed, mixed, GeneratorReturn>
+     * @param string[] $args
+     * @phpstan-return \Generator<mixed, mixed, mixed, GeneratorReturn|null>
      */
     abstract public function execute(CommandSender $sender, array $args) : \Generator;
 
@@ -88,6 +74,6 @@ abstract class Subcommand {
      * Overwrite this method to handle any exceptions that were thrown during the executing of
      * {@see Subcommand::execute()}, e.g. {@see SqlError} when interacting with the database.
      */
-    public function onError(CommandSender $sender, mixed $error) : void {
+    public function onError(CommandSender $sender, \Throwable $error) : void {
     }
 }

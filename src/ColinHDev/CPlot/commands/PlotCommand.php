@@ -1,9 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace ColinHDev\CPlot\commands;
 
 use ColinHDev\CPlot\commands\subcommands\AddSubcommand;
 use ColinHDev\CPlot\commands\subcommands\AutoSubcommand;
+use ColinHDev\CPlot\commands\subcommands\BiomeSubcommand;
 use ColinHDev\CPlot\commands\subcommands\BorderSubcommand;
 use ColinHDev\CPlot\commands\subcommands\ClaimSubcommand;
 use ColinHDev\CPlot\commands\subcommands\ClearSubcommand;
@@ -27,7 +30,7 @@ use ColinHDev\CPlot\commands\subcommands\VisitSubcommand;
 use ColinHDev\CPlot\commands\subcommands\WallSubcommand;
 use ColinHDev\CPlot\commands\subcommands\WarpSubcommand;
 use ColinHDev\CPlot\CPlot;
-use ColinHDev\CPlot\ResourceManager;
+use ColinHDev\CPlot\provider\LanguageManager;
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
 use pocketmine\plugin\Plugin;
@@ -36,58 +39,64 @@ use SOFe\AwaitGenerator\Await;
 
 class PlotCommand extends Command implements PluginOwned {
 
-    /** @var SubCommand[] */
+    /** @var array<string, Subcommand<mixed>> */
     private array $subcommands = [];
 
     /** @var array<string, string> */
     private array $executingSubcommands = [];
 
     /**
-     * @throws \InvalidArgumentException
+     * @throws \InvalidArgumentException|\JsonException
      */
     public function __construct() {
-        $resourceManager = ResourceManager::getInstance();
-        $commandData = $resourceManager->getCommandData("plot");
-        parent::__construct($commandData["name"]);
-        $this->setAliases($commandData["alias"]);
-        $this->setDescription($commandData["description"]);
-        $this->setUsage($commandData["usage"]);
+        $languageProvider = LanguageManager::getInstance()->getProvider();
+        parent::__construct(
+            $languageProvider->translateString("plot.name"),
+            $languageProvider->translateString("plot.description")
+        );
+        $alias = json_decode($languageProvider->translateString("plot.alias"), true, 512, JSON_THROW_ON_ERROR);
+        assert(is_array($alias));
+        $this->setAliases($alias);
         $this->setPermission("cplot.command.plot");
-        $this->setPermissionMessage($resourceManager->getPrefix() . $commandData["permissionMessage"]);
 
-        $this->registerSubcommand(new AddSubcommand($resourceManager->getCommandData("add"), "cplot.subcommand.add"));
-        $this->registerSubcommand(new AutoSubcommand($resourceManager->getCommandData("auto"), "cplot.subcommand.auto"));
-        $this->registerSubcommand(new BorderSubcommand($resourceManager->getCommandData("border"), "cplot.subcommand.border"));
-        $this->registerSubcommand(new ClaimSubcommand($resourceManager->getCommandData("claim"), "cplot.subcommand.claim"));
-        $this->registerSubcommand(new ClearSubcommand($resourceManager->getCommandData("clear"), "cplot.subcommand.clear"));
-        $this->registerSubcommand(new DeniedSubcommand($resourceManager->getCommandData("denied"), "cplot.subcommand.denied"));
-        $this->registerSubcommand(new DenySubcommand($resourceManager->getCommandData("deny"), "cplot.subcommand.deny"));
-        $this->registerSubcommand(new FlagSubcommand($resourceManager->getCommandData("flag"), "cplot.subcommand.flag"));
-        $this->registerSubcommand(new GenerateSubcommand($resourceManager->getCommandData("generate"), "cplot.subcommand.generate"));
-        $this->registerSubcommand(new HelpersSubcommand($resourceManager->getCommandData("helpers"), "cplot.subcommand.helpers"));
-        $this->registerSubcommand(new HelpSubcommand($resourceManager->getCommandData("help"), "cplot.subcommand.help", $this));
-        $this->registerSubcommand(new InfoSubcommand($resourceManager->getCommandData("info"), "cplot.subcommand.info"));
-        $this->registerSubcommand(new MergeSubcommand($resourceManager->getCommandData("merge"), "cplot.subcommand.merge"));
-        $this->registerSubcommand(new RemoveSubcommand($resourceManager->getCommandData("remove"), "cplot.subcommand.remove"));
-        $this->registerSubcommand(new ResetSubcommand($resourceManager->getCommandData("reset"), "cplot.subcommand.reset"));
-        $this->registerSubcommand(new SchematicSubcommand($resourceManager->getCommandData("schematic"), "cplot.subcommand.schematic"));
-        $this->registerSubcommand(new SettingSubcommand($resourceManager->getCommandData("setting"), "cplot.subcommand.setting"));
-        $this->registerSubcommand(new TrustedSubcommand($resourceManager->getCommandData("trusted"), "cplot.subcommand.trusted"));
-        $this->registerSubcommand(new TrustSubcommand($resourceManager->getCommandData("trust"), "cplot.subcommand.trust"));
-        $this->registerSubcommand(new UndenySubcommand($resourceManager->getCommandData("undeny"), "cplot.subcommand.undeny"));
-        $this->registerSubcommand(new UntrustSubcommand($resourceManager->getCommandData("untrust"), "cplot.subcommand.untrust"));
-        $this->registerSubcommand(new VisitSubcommand($resourceManager->getCommandData("visit"), "cplot.subcommand.visit"));
-        $this->registerSubcommand(new WallSubcommand($resourceManager->getCommandData("wall"), "cplot.subcommand.wall"));
-        $this->registerSubcommand(new WarpSubcommand($resourceManager->getCommandData("warp"), "cplot.subcommand.warp"));
+        $this->registerSubcommand(new AddSubcommand("add"));
+        $this->registerSubcommand(new AutoSubcommand("auto"));
+        $this->registerSubcommand(new BiomeSubcommand("biome"));
+        $this->registerSubcommand(new BorderSubcommand("border"));
+        $this->registerSubcommand(new ClaimSubcommand("claim"));
+        $this->registerSubcommand(new ClearSubcommand("clear"));
+        $this->registerSubcommand(new DeniedSubcommand("denied"));
+        $this->registerSubcommand(new DenySubcommand("deny"));
+        $this->registerSubcommand(new FlagSubcommand("flag"));
+        $this->registerSubcommand(new GenerateSubcommand("generate"));
+        $this->registerSubcommand(new HelpersSubcommand("helpers"));
+        $this->registerSubcommand(new HelpSubcommand("help", $this));
+        $this->registerSubcommand(new InfoSubcommand("info"));
+        $this->registerSubcommand(new MergeSubcommand("merge"));
+        $this->registerSubcommand(new RemoveSubcommand("remove"));
+        $this->registerSubcommand(new ResetSubcommand("reset"));
+        $this->registerSubcommand(new SchematicSubcommand("schematic"));
+        $this->registerSubcommand(new SettingSubcommand("setting"));
+        $this->registerSubcommand(new TrustedSubcommand("trusted"));
+        $this->registerSubcommand(new TrustSubcommand("trust"));
+        $this->registerSubcommand(new UndenySubcommand("undeny"));
+        $this->registerSubcommand(new UntrustSubcommand("untrust"));
+        $this->registerSubcommand(new VisitSubcommand("visit"));
+        $this->registerSubcommand(new WallSubcommand("wall"));
+        $this->registerSubcommand(new WarpSubcommand("warp"));
     }
 
     /**
-     * @return SubCommand[]
+     * @phpstan-return array<string, Subcommand<mixed>>
      */
     public function getSubcommands() : array {
         return $this->subcommands;
     }
 
+    /**
+     * @phpstan-template TSubcommand of Subcommand<mixed>
+     * @phpstan-param TSubcommand $subcommand
+     */
     public function registerSubcommand(Subcommand $subcommand) : void {
         $this->subcommands[$subcommand->getName()] = $subcommand;
         foreach ($subcommand->getAlias() as $alias) {
@@ -96,18 +105,19 @@ class PlotCommand extends Command implements PluginOwned {
     }
 
     public function execute(CommandSender $sender, string $commandLabel, array $args) : void {
-        if (!$this->testPermission($sender)) {
+        if (!$this->testPermissionSilent($sender)) {
+            LanguageManager::getInstance()->getProvider()->sendMessage($sender, ["prefix", "plot.permissionMessage"]);
             return;
         }
 
         if (count($args) === 0) {
-            $sender->sendMessage(ResourceManager::getInstance()->getPrefix() . $this->getUsage());
+            LanguageManager::getInstance()->getProvider()->sendMessage($sender, ["prefix", "plot.usage"]);
             return;
         }
 
         $subcommand = strtolower(array_shift($args));
         if (!isset($this->subcommands[$subcommand])) {
-            $sender->sendMessage(ResourceManager::getInstance()->getPrefix() . ResourceManager::getInstance()->translateString("plot.unknownSubcommand"));
+            LanguageManager::getInstance()->getProvider()->sendMessage($sender, ["prefix", "plot.unknownSubcommand"]);
             return;
         }
 
@@ -119,15 +129,15 @@ class PlotCommand extends Command implements PluginOwned {
         // command executor should not be able to execute another subcommand. Because of that, the previously typed
         // subcommand is stored and checked until that subcommand is finished executing.
         if (isset($this->executingSubcommands[$sender->getName()])) {
-            $sender->sendMessage(
-                ResourceManager::getInstance()->getPrefix() .
-                ResourceManager::getInstance()->translateString(
-                    "plot.subcommandExecuting",
-                    [
+            LanguageManager::getInstance()->getProvider()->sendMessage(
+                $sender,
+                [
+                    "prefix",
+                    "plot.subcommandExecuting" => [
                         "/" . $commandLabel . " " . $subcommand,
                         "/" . $commandLabel . " " . $this->executingSubcommands[$sender->getName()]
                     ]
-                )
+                ]
             );
             return;
         }
@@ -142,7 +152,7 @@ class PlotCommand extends Command implements PluginOwned {
                     $command->onSuccess($sender, $return);
                 }
             },
-            function (mixed $error = null) use ($command, $sender) : void {
+            function (?\Throwable $error = null) use ($command, $sender) : void {
                 // That also needs to be done in case of an error. Otherwise, the command executor would not be able to
                 // perform another subcommand until the server restarts.
                 unset($this->executingSubcommands[$sender->getName()]);

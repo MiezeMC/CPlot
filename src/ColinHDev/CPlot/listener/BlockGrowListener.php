@@ -1,13 +1,15 @@
 <?php
 
+declare(strict_types=1);
+
 namespace ColinHDev\CPlot\listener;
 
+use ColinHDev\CPlot\attributes\BooleanAttribute;
+use ColinHDev\CPlot\plots\BasePlot;
+use ColinHDev\CPlot\plots\flags\FlagIDs;
+use ColinHDev\CPlot\plots\Plot;
 use ColinHDev\CPlot\provider\DataProvider;
-use ColinHDev\CPlotAPI\attributes\BooleanAttribute;
-use ColinHDev\CPlotAPI\plots\BasePlot;
-use ColinHDev\CPlotAPI\plots\flags\FlagIDs;
-use ColinHDev\CPlotAPI\plots\Plot;
-use ColinHDev\CPlotAPI\worlds\WorldSettings;
+use ColinHDev\CPlot\worlds\WorldSettings;
 use pocketmine\event\block\BlockGrowEvent;
 use pocketmine\event\Listener;
 
@@ -33,7 +35,7 @@ class BlockGrowListener implements Listener {
             $event->cancel();
             return;
         }
-        if ($plot !== null) {
+        if ($plot instanceof Plot) {
             /** @var BooleanAttribute $flag */
             $flag = $plot->getFlagNonNullByID(FlagIDs::FLAG_GROWING);
             if ($flag->getValue() === true) {

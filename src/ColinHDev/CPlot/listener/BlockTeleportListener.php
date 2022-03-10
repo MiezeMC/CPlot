@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace ColinHDev\CPlot\listener;
 
+use ColinHDev\CPlot\plots\BasePlot;
+use ColinHDev\CPlot\plots\Plot;
 use ColinHDev\CPlot\provider\DataProvider;
-use ColinHDev\CPlotAPI\plots\BasePlot;
-use ColinHDev\CPlotAPI\plots\Plot;
-use ColinHDev\CPlotAPI\worlds\WorldSettings;
+use ColinHDev\CPlot\worlds\WorldSettings;
 use pocketmine\event\block\BlockTeleportEvent;
 use pocketmine\event\Listener;
 use pocketmine\world\Position;

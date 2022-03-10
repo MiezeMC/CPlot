@@ -1,60 +1,70 @@
 <?php
 
+declare(strict_types=1);
+
 namespace ColinHDev\CPlot\commands\subcommands;
 
 use ColinHDev\CPlot\commands\Subcommand;
+use ColinHDev\CPlot\player\PlayerData;
+use ColinHDev\CPlot\plots\Plot;
 use ColinHDev\CPlot\provider\DataProvider;
-use ColinHDev\CPlotAPI\players\PlayerData;
-use ColinHDev\CPlotAPI\plots\Plot;
-use ColinHDev\CPlotAPI\worlds\WorldSettings;
+use ColinHDev\CPlot\provider\LanguageManager;
+use ColinHDev\CPlot\worlds\WorldSettings;
 use pocketmine\command\CommandSender;
 use pocketmine\player\Player;
 
+/**
+ * @phpstan-extends Subcommand<null>
+ */
 class TrustedSubcommand extends Subcommand {
 
     public function execute(CommandSender $sender, array $args) : \Generator {
         if (!$sender instanceof Player) {
-            $sender->sendMessage($this->getPrefix() . $this->translateString("trusted.senderNotOnline"));
-            return;
+            yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "trusted.senderNotOnline"]);
+            return null;
         }
 
-        if (!((yield from DataProvider::getInstance()->awaitWorld($sender->getWorld()->getFolderName())) instanceof WorldSettings)) {
-            $sender->sendMessage($this->getPrefix() . $this->translateString("trusted.noPlotWorld"));
-            return;
+        if (!((yield DataProvider::getInstance()->awaitWorld($sender->getWorld()->getFolderName())) instanceof WorldSettings)) {
+            yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "trusted.noPlotWorld"]);
+            return null;
         }
-        $plot = yield from Plot::awaitFromPosition($sender->getPosition());
+        $plot = yield Plot::awaitFromPosition($sender->getPosition());
         if (!($plot instanceof Plot)) {
-            $sender->sendMessage($this->getPrefix() . $this->translateString("trusted.noPlot"));
-            return;
+            yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "trusted.noPlot"]);
+            return null;
         }
 
         $trustedPlayerData = [];
         foreach ($plot->getPlotTrusted() as $plotPlayer) {
-            $playerData = yield from DataProvider::getInstance()->awaitPlayerDataByUUID($plotPlayer->getPlayerUUID());
-            if ($playerData instanceof PlayerData) {
-                $playerName = $playerData->getPlayerName();
-            } else {
-                $playerName = "ERROR";
-            }
-            [$d, $m, $y, $h, $min, $s] = explode(".", date("d.m.Y.H.i.s", (int) (round($plotPlayer->getAddTime() / 1000))));
-            $trustedPlayerData[] = $this->translateString("trusted.success.list", [
-                $playerName,
-                $this->translateString("trusted.success.list.addTime.format", [$d, $m, $y, $h, $min, $s])
-            ]);
+            $plotPlayerData = $plotPlayer->getPlayerData();
+            /** @phpstan-var string $addTime */
+            $addTime = yield LanguageManager::getInstance()->getProvider()->awaitTranslationForCommandSender(
+                $sender,
+                ["trusted.success.list.addTime.format" => explode(".", date("d.m.Y.H.i.s", $plotPlayer->getAddTime()))]
+            );
+            $trustedPlayerData[] = yield LanguageManager::getInstance()->getProvider()->awaitTranslationForCommandSender(
+                $sender,
+                ["trusted.success.list" => [
+                    $plotPlayerData->getPlayerName() ?? "Error: " . ($plotPlayerData->getPlayerXUID() ?? $plotPlayerData->getPlayerUUID() ?? $plotPlayerData->getPlayerID()),
+                    $addTime
+                ]]
+            );
         }
         if (count($trustedPlayerData) === 0) {
-            $sender->sendMessage($this->getPrefix() . $this->translateString("trusted.noTrustedPlayers"));
-            return;
+            yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "trusted.noTrustedPlayers"]);
+            return null;
         }
 
-        $sender->sendMessage(
-            $this->getPrefix() .
-            $this->translateString(
-                "trusted.success",
-                [
-                    implode($this->translateString("trusted.success.list.separator"), $trustedPlayerData)
-                ]
-            )
+        /** @phpstan-var string $separator */
+        $separator = yield LanguageManager::getInstance()->getProvider()->awaitTranslationForCommandSender($sender, "trusted.success.list.separator");
+        $list = implode($separator, $trustedPlayerData);
+        yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage(
+            $sender,
+            [
+                "prefix",
+                "trusted.success" => $list
+            ]
         );
+        return null;
     }
 }

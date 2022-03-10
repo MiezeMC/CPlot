@@ -16,6 +16,8 @@ permissions:
         default: true
     cplot.subcommand.auto:
         default: true
+    cplot.subcommand.biome:
+        default: true
     cplot.subcommand.border:
         default: true
     cplot.subcommand.claim:
@@ -63,6 +65,8 @@ permissions:
 
     cplot.admin.add:
         default: op
+    cplot.admin.biome:
+        default: op
     cplot.admin.border:
         default: op
     cplot.admin.clear:
@@ -103,9 +107,9 @@ permissions:
     cplot.flag.plot_leave:
         default: true
     cplot.flag.message:
-        default: op
+        default: true
     cplot.flag.spawn:
-        default: op
+        default: true
     cplot.flag.item_drop:
         default: true
     cplot.flag.item_pickup:

@@ -1,118 +1,97 @@
 <?php
 
+declare(strict_types=1);
+
 namespace ColinHDev\CPlot\commands\subcommands;
 
 use ColinHDev\CPlot\commands\Subcommand;
-use ColinHDev\CPlot\CPlot;
+use ColinHDev\CPlot\player\PlayerData;
+use ColinHDev\CPlot\plots\Plot;
+use ColinHDev\CPlot\plots\PlotPlayer;
 use ColinHDev\CPlot\provider\DataProvider;
+use ColinHDev\CPlot\provider\EconomyManager;
 use ColinHDev\CPlot\provider\EconomyProvider;
-use ColinHDev\CPlot\tasks\async\PlotBorderChangeAsyncTask;
-use ColinHDev\CPlotAPI\plots\BasePlot;
-use ColinHDev\CPlotAPI\plots\Plot;
-use ColinHDev\CPlotAPI\plots\PlotPlayer;
-use ColinHDev\CPlotAPI\worlds\WorldSettings;
+use ColinHDev\CPlot\provider\LanguageManager;
+use ColinHDev\CPlot\worlds\WorldSettings;
 use pocketmine\command\CommandSender;
 use pocketmine\permission\Permission;
 use pocketmine\player\Player;
-use pocketmine\Server;
-use poggit\libasynql\SqlError;
 
+/**
+ * @phpstan-extends Subcommand<null>
+ */
 class ClaimSubcommand extends Subcommand {
 
     public function execute(CommandSender $sender, array $args) : \Generator {
         if (!$sender instanceof Player) {
-            $sender->sendMessage($this->getPrefix() . $this->translateString("claim.senderNotOnline"));
-            return;
+            yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "claim.senderNotOnline"]);
+            return null;
         }
 
-        $worldSettings = yield from DataProvider::getInstance()->awaitWorld($sender->getWorld()->getFolderName());
-        if (!($worldSettings instanceof WorldSettings)) {
-            $sender->sendMessage($this->getPrefix() . $this->translateString("claim.noPlotWorld"));
-            return;
+        if (!((yield DataProvider::getInstance()->awaitWorld($sender->getWorld()->getFolderName())) instanceof WorldSettings)) {
+            yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "claim.noPlotWorld"]);
+            return null;
         }
 
-        $plot = yield from Plot::awaitFromPosition($sender->getPosition(), false);
+        $plot = yield Plot::awaitFromPosition($sender->getPosition(), false);
         if (!($plot instanceof Plot)) {
-            $sender->sendMessage($this->getPrefix() . $this->translateString("claim.noPlot"));
-            return;
+            yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "claim.noPlot"]);
+            return null;
         }
 
-        $senderUUID = $sender->getUniqueId()->getBytes();
         if ($plot->hasPlotOwner()) {
-            if ($plot->isPlotOwner($senderUUID)) {
-                $sender->sendMessage($this->getPrefix() . $this->translateString("claim.plotAlreadyClaimedBySender"));
-                return;
+            if ($plot->isPlotOwner($sender)) {
+                yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "claim.plotAlreadyClaimedBySender"]);
+                return null;
             }
-            $sender->sendMessage($this->getPrefix() . $this->translateString("claim.plotAlreadyClaimed"));
-            return;
+            yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "claim.plotAlreadyClaimed"]);
+            return null;
         }
 
-        $claimedPlotsCount = count(
-            yield from DataProvider::getInstance()->awaitPlotsByPlotPlayer($senderUUID, PlotPlayer::STATE_OWNER)
-        );
+        $playerData = yield DataProvider::getInstance()->awaitPlayerDataByPlayer($sender);
+        if (!($playerData instanceof PlayerData)) {
+            return null;
+        }
+        /** @phpstan-var array<string, Plot> $claimedPlots */
+        $claimedPlots = yield DataProvider::getInstance()->awaitPlotsByPlotPlayer($playerData->getPlayerID(), PlotPlayer::STATE_OWNER);
+        $claimedPlotsCount = count($claimedPlots);
         $maxPlots = $this->getMaxPlotsOfPlayer($sender);
         if ($claimedPlotsCount > $maxPlots) {
-            $sender->sendMessage($this->getPrefix() . $this->translateString("claim.plotLimitReached", [$claimedPlotsCount, $maxPlots]));
-            return;
+            yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "claim.plotLimitReached" => [$claimedPlotsCount, $maxPlots]]);
+            return null;
         }
 
-        $economyProvider = CPlot::getInstance()->getEconomyProvider();
-        if ($economyProvider !== null) {
-            $price = $economyProvider->getPrice(EconomyProvider::PRICE_CLAIM) ?? 0.0;
+        $economyProvider = EconomyManager::getInstance()->getProvider();
+        if ($economyProvider instanceof EconomyProvider) {
+            $price = EconomyManager::getInstance()->getClaimPrice();
             if ($price > 0.0) {
-                $money = $economyProvider->getMoney($sender);
-                if ($money === null) {
-                    $sender->sendMessage($this->getPrefix() . $this->translateString("claim.loadMoneyError"));
-                    return;
+                $money = yield $economyProvider->awaitMoney($sender);
+                if (!is_float($money)) {
+                    yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "claim.loadMoneyError"]);
+                    return null;
                 }
                 if ($money < $price) {
-                    $sender->sendMessage($this->getPrefix() . $this->translateString("claim.notEnoughMoney", [$economyProvider->getCurrency(), $economyProvider->parseMoneyToString($price), $economyProvider->parseMoneyToString($price - $money)]));
-                    return;
+                    yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "claim.senderNotOnline" => [$economyProvider->getCurrency(), $economyProvider->parseMoneyToString($price), $economyProvider->parseMoneyToString($price - $money)]]);
+                    return null;
                 }
-                if (!$economyProvider->removeMoney($sender, $price, "Paid " . $price . $economyProvider->getCurrency() . " to claim the plot " . $plot->toString() . ".")) {
-                    $sender->sendMessage($this->getPrefix() . $this->translateString("claim.saveMoneyError"));
-                    return;
-                }
-                $sender->sendMessage($this->getPrefix() . $this->translateString("claim.chargedMoney", [$economyProvider->getCurrency(), $economyProvider->parseMoneyToString($price)]));
+                yield $economyProvider->awaitMoneyRemoval($sender, $price);
+                yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "claim.chargedMoney" => [$economyProvider->getCurrency(), $economyProvider->parseMoneyToString($price)]]);
             }
         }
 
-        $senderData = new PlotPlayer($senderUUID, PlotPlayer::STATE_OWNER);
+        $senderData = new PlotPlayer($playerData, PlotPlayer::STATE_OWNER);
         $plot->addPlotPlayer($senderData);
-        yield from DataProvider::getInstance()->savePlot($plot);
-        yield from DataProvider::getInstance()->savePlotPlayer($plot, $senderData);
+        yield DataProvider::getInstance()->savePlotPlayer($plot, $senderData);
 
-        $blockBorderOnClaim = $worldSettings->getBorderBlockOnClaim();
-        $task = new PlotBorderChangeAsyncTask($worldSettings, $plot, $blockBorderOnClaim);
-        $world = $sender->getWorld();
-        $task->setWorld($world);
-        $task->setClosure(
-            function (int $elapsedTime, string $elapsedTimeString, array $result) use ($world, $sender, $blockBorderOnClaim) {
-                [$plotCount, $plots] = $result;
-                $plots = array_map(
-                    static function (BasePlot $plot) : string {
-                        return $plot->toSmallString();
-                    },
-                    $plots
-                );
-                Server::getInstance()->getLogger()->debug(
-                    "Changing plot border due to plot claim to " . $blockBorderOnClaim->getName() . " (ID:Meta: " . $blockBorderOnClaim->getId() . ":" . $blockBorderOnClaim->getMeta() . ") in world " . $world->getDisplayName() . " (folder: " . $world->getFolderName() . ") took " . $elapsedTimeString . " (" . $elapsedTime . "ms) for player " . $sender->getUniqueId()->getBytes() . " (" . $sender->getName() . ") for " . $plotCount . " plot" . ($plotCount > 1 ? "s" : "") . ": [" . implode(", ", $plots) . "]."
-                );
-            }
-        );
-        Server::getInstance()->getAsyncPool()->submitTask($task);
-
-        $sender->sendMessage($this->getPrefix() . $this->translateString("claim.success", [$plot->toString(), $plot->toSmallString()]));
+        yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "claim.success" => [$plot->toString(), $plot->toSmallString()]]);
+        return null;
     }
 
-    /**
-     * @param SqlError $error
-     */
-    public function onError(CommandSender $sender, mixed $error) : void {
+    public function onError(CommandSender $sender, \Throwable $error) : void {
         if ($sender instanceof Player && !$sender->isConnected()) {
             return;
         }
-        $sender->sendMessage($this->getPrefix() . $this->translateString("claim.saveError", [$error->getMessage()]));
+        LanguageManager::getInstance()->getProvider()->sendMessage($sender, ["prefix", "claim.saveError" => $error->getMessage()]);
     }
 
     private function getMaxPlotsOfPlayer(Player $player) : int {

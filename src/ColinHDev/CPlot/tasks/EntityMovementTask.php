@@ -1,11 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace ColinHDev\CPlot\tasks;
 
+use ColinHDev\CPlot\plots\BasePlot;
+use ColinHDev\CPlot\plots\Plot;
 use ColinHDev\CPlot\provider\DataProvider;
-use ColinHDev\CPlotAPI\plots\BasePlot;
-use ColinHDev\CPlotAPI\plots\Plot;
-use ColinHDev\CPlotAPI\worlds\WorldSettings;
+use ColinHDev\CPlot\worlds\WorldSettings;
 use pocketmine\entity\Human;
 use pocketmine\entity\object\ItemEntity;
 use pocketmine\scheduler\Task;
@@ -24,11 +26,14 @@ class EntityMovementTask extends Task {
     }
 
     public function onRun() : void {
+        if (!DataProvider::getInstance()->isInitialized()) {
+            return;
+        }
         foreach ($this->worldManager->getWorlds() as $world) {
             $worldName = $world->getFolderName();
             $worldSettings = DataProvider::getInstance()->loadWorldIntoCache($worldName);
             if (!$worldSettings instanceof WorldSettings) {
-                return;
+                continue;
             }
 
             foreach ($world->updateEntities as $entity) {
@@ -62,7 +67,7 @@ class EntityMovementTask extends Task {
                     $position->getFloorY() === $lastPosition->getFloorY() &&
                     $position->getFloorZ() === $lastPosition->getFloorZ()
                 ) {
-                    return;
+                    continue;
                 }
 
                 $lastBasePlot = BasePlot::fromVector3($worldName, $worldSettings, $lastPosition);

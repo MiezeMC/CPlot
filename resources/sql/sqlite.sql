@@ -3,27 +3,37 @@
 -- #{ cplot
 
 -- #  { init
+-- #    { foreignKeys
+PRAGMA foreign_keys = ON;
+-- #    }
 -- #    { playerDataTable
 CREATE TABLE IF NOT EXISTS playerData (
-    playerUUID      VARCHAR(256)    NOT NULL,
-    playerName      VARCHAR(256)    NOT NULL,
-    lastJoin        TEXT            NOT NULL,
-    PRIMARY KEY (playerUUID)
+    playerID    INTEGER         PRIMARY KEY,
+    playerUUID  VARCHAR(256),
+    playerXUID  VARCHAR(256),
+    playerName  VARCHAR(256),
+    lastJoin    TEXT            NOT NULL
 );
+-- #    }
+-- #    { asteriskPlayer
+-- #      :lastJoin string
+INSERT OR IGNORE INTO playerData (playerID, playerUUID, playerXUID, playerName, lastJoin)
+VALUES (1, "*", "*", "*", :lastJoin);
 -- #    }
 -- #    { playerSettingsTable
 CREATE TABLE IF NOT EXISTS playerSettings (
-    playerUUID      VARCHAR(256)    NOT NULL,
-    ID              TEXT            NOT NULL,
-    value           TEXT            NOT NULL,
-    PRIMARY KEY (playerUUID, ID),
-    FOREIGN KEY (playerUUID) REFERENCES playerData (playerUUID) ON DELETE CASCADE
+    playerID    BIGINT  NOT NULL,
+    ID          TEXT    NOT NULL,
+    value       TEXT    NOT NULL,
+    PRIMARY KEY (playerID, ID),
+    FOREIGN KEY (playerID) REFERENCES playerData (playerID) ON DELETE CASCADE
 );
 -- #    }
 -- #    { worldsTable
 CREATE TABLE IF NOT EXISTS worlds (
     worldName           VARCHAR(256)    NOT NULL,
     worldType           TEXT            NOT NULL,
+    biomeID             BIGINT          NOT NULL,
     roadSchematic       TEXT            NOT NULL,
     mergeRoadSchematic  TEXT            NOT NULL,
     plotSchematic       TEXT            NOT NULL,
@@ -32,21 +42,19 @@ CREATE TABLE IF NOT EXISTS worlds (
     groundSize          BIGINT          NOT NULL,
     roadBlock           TEXT            NOT NULL,
     borderBlock         TEXT            NOT NULL,
-    borderBlockOnClaim  TEXT            NOT NULL,
     plotFloorBlock      TEXT            NOT NULL,
     plotFillBlock       TEXT            NOT NULL,
     plotBottomBlock     TEXT            NOT NULL,
     PRIMARY KEY (worldName)
 );
 -- #    }
--- #    { plotsTable
-CREATE TABLE IF NOT EXISTS plots (
+-- #    { plotAliasesTable
+CREATE TABLE IF NOT EXISTS plotAliases (
     worldName       VARCHAR(256)    NOT NULL,
     x               BIGINT          NOT NULL,
     z               BIGINT          NOT NULL,
-    biomeID         BIGINT          NOT NULL,
-    alias           TEXT,
-    PRIMARY KEY (worldName, x, z),
+    alias           TEXT            NOT NULL,
+    PRIMARY KEY (worldName, x, z, alias),
     FOREIGN KEY (worldName) REFERENCES worlds (worldName) ON DELETE CASCADE
 );
 -- #    }
@@ -57,8 +65,7 @@ CREATE TABLE IF NOT EXISTS mergePlots (
     originZ     BIGINT          NOT NULL,
     mergeX      BIGINT          NOT NULL,
     mergeZ      BIGINT          NOT NULL,
-    PRIMARY KEY (worldName, originX, originZ, mergeX, mergeZ),
-    FOREIGN KEY (worldName, originX, originZ) REFERENCES plots (worldName, x, z) ON DELETE CASCADE
+    PRIMARY KEY (worldName, originX, originZ, mergeX, mergeZ)
 );
 -- #    }
 -- #    { plotPlayersTable
@@ -66,12 +73,11 @@ CREATE TABLE IF NOT EXISTS plotPlayers (
     worldName   VARCHAR(256)    NOT NULL,
     x           BIGINT          NOT NULL,
     z           BIGINT          NOT NULL,
-    playerUUID  VARCHAR(256)    NOT NULL,
+    playerID    BIGINT          NOT NULL,
     state       TEXT            NOT NULL,
     addTime     TEXT            NOT NULL,
-    PRIMARY KEY (worldName, x, z, playerUUID),
-    FOREIGN KEY (worldName, x, z) REFERENCES plots (worldName, x, z) ON DELETE CASCADE,
-    FOREIGN KEY (playerUUID) REFERENCES playerData (playerUUID) ON DELETE CASCADE
+    PRIMARY KEY (worldName, x, z, playerID)
+    FOREIGN KEY (playerID) REFERENCES playerData (playerID) ON DELETE CASCADE
 );
 -- #    }
 -- #    { plotFlagsTable
@@ -81,8 +87,7 @@ CREATE TABLE IF NOT EXISTS plotFlags (
     z           BIGINT          NOT NULL,
     ID          TEXT            NOT NULL,
     value       TEXT            NOT NULL,
-    PRIMARY KEY (worldName, x, z, ID),
-    FOREIGN KEY (worldName, x, z) REFERENCES plots (worldName, x, z) ON DELETE CASCADE
+    PRIMARY KEY (worldName, x, z, ID)
 );
 -- #    }
 -- #    { plotRatesTable
@@ -91,34 +96,45 @@ CREATE TABLE IF NOT EXISTS plotRates (
     x           BIGINT          NOT NULL,
     z           BIGINT          NOT NULL,
     rate        TEXT            NOT NULL,
-    playerUUID  VARCHAR(256)    NOT NULL,
+    playerID    BIGINT          NOT NULL,
     rateTime    TEXT            NOT NULL,
     comment     TEXT,
-    PRIMARY KEY (worldName, x, z, playerUUID, rateTime),
-    FOREIGN KEY (worldName, x, z) REFERENCES plots (worldName, x, z) ON DELETE CASCADE,
-    FOREIGN KEY (playerUUID) REFERENCES playerData (playerUUID) ON DELETE CASCADE
+    PRIMARY KEY (worldName, x, z, playerID, rateTime),
+    FOREIGN KEY (playerID) REFERENCES playerData (playerID) ON DELETE CASCADE
 );
 -- #    }
 -- #  }
 
 -- #  { get
+-- #    { playerDataByIdentifier
+-- #      :playerID int
+SELECT playerUUID, playerXUID, playerName, lastJoin
+FROM playerData
+WHERE playerID = :playerID;
+-- #    }
 -- #    { playerDataByUUID
 -- #      :playerUUID string
-SELECT playerName, lastJoin
+SELECT playerID, playerXUID, playerName, lastJoin
 FROM playerData
 WHERE playerUUID = :playerUUID;
 -- #    }
+-- #    { playerDataByXUID
+-- #      :playerXUID string
+SELECT playerID, playerUUID, playerName, lastJoin
+FROM playerData
+WHERE playerXUID = :playerXUID;
+-- #    }
 -- #    { playerDataByName
 -- #      :playerName string
-SELECT playerUUID, lastJoin
+SELECT playerID, playerUUID, playerXUID, lastJoin
 FROM playerData
 WHERE playerName = :playerName;
 -- #    }
 -- #    { playerSettings
--- #      :playerUUID string
+-- #      :playerID int
 SELECT ID, value
 FROM playerSettings
-WHERE playerUUID = :playerUUID;
+WHERE playerID = :playerID;
 -- #    }
 -- #    { world
 -- #      :worldName string
@@ -126,18 +142,18 @@ SELECT *
 FROM worlds
 WHERE worldName = :worldName;
 -- #    }
--- #    { plot
+-- #    { plotAliases
 -- #      :worldName string
 -- #      :x int
 -- #      :z int
-SELECT biomeID, alias
-FROM plots
+SELECT alias
+FROM plotAliases
 WHERE worldName = :worldName AND x = :x AND z = :z;
 -- #    }
 -- #    { plotByAlias
 -- #      :alias string
-SELECT worldName, x, z, biomeID
-FROM plots
+SELECT worldName, x, z
+FROM plotAliases
 WHERE alias = :alias;
 -- #    }
 -- #    { originPlot
@@ -156,16 +172,16 @@ SELECT mergeX, mergeZ
 FROM mergePlots
 WHERE worldName = :worldName AND originX = :originX AND originZ = :originZ;
 -- #    }
--- #    { existingPlotXZ
+-- #    { ownedPlots
 -- #      :worldName string
 -- #      :number int
 SELECT x, z
-FROM plots
+FROM plotPlayers
 WHERE (
     worldName = :worldName AND (
         (abs(x) = :number AND abs(z) <= :number) OR
         (abs(z) = :number AND abs(x) <= :number)
-    )
+    ) AND state = 'state_owner'
 )
 UNION
 SELECT mergeX AS x, mergeZ AS z
@@ -174,6 +190,10 @@ WHERE (
     worldName = :worldName AND (
         (abs(mergeX) = :number AND abs(mergeZ) <= :number) OR
         (abs(mergeZ) = :number AND abs(mergeX) <= :number)
+    ) AND EXISTS (
+        SELECT x, z
+        FROM plotPlayers
+        WHERE worldName = :worldName AND x = originX AND z = originZ AND state = 'state_owner'
     )
 );
 -- #    }
@@ -181,16 +201,16 @@ WHERE (
 -- #      :worldName string
 -- #      :x int
 -- #      :z int
-SELECT playerUUID, state, addTime
+SELECT playerID, state, addTime
 FROM plotPlayers
 WHERE worldName = :worldName AND x = :x AND z = :z;
 -- #    }
 -- #    { plotsByPlotPlayer
--- #      :playerUUID string
+-- #      :playerID int
 -- #      :state string
 SELECT worldName, x, z
 FROM plotPlayers
-WHERE playerUUID = :playerUUID AND state = :state;
+WHERE playerID = :playerID AND state = :state;
 -- #    }
 -- #    { plotFlags
 -- #      :worldName string
@@ -204,31 +224,42 @@ WHERE worldName = :worldName AND x = :x AND z = :z;
 -- #      :worldName string
 -- #      :x int
 -- #      :z int
-SELECT rate, playerUUID, rateTime, comment
+SELECT rate, playerID, rateTime, comment
 FROM plotRates
 WHERE worldName = :worldName AND x = :x AND z = :z;
 -- #    }
 -- #  }
 
 -- #  { set
--- #    { playerData
+-- #    { newPlayerData
 -- #      :playerUUID string
+-- #      :playerXUID string
 -- #      :playerName string
 -- #      :lastJoin string
-INSERT INTO playerData (playerUUID, playerName, lastJoin)
-VALUES (:playerUUID, :playerName, :lastJoin)
-ON CONFLICT (playerUUID) DO UPDATE SET playerName = excluded.playerName, lastJoin = excluded.lastJoin;
+INSERT INTO playerData (playerUUID, playerXUID, playerName, lastJoin)
+VALUES (:playerUUID, :playerXUID, :playerName, :lastJoin);
+-- #    }
+-- #    { playerData
+-- #      :playerID int
+-- #      :playerUUID string
+-- #      :playerXUID string
+-- #      :playerName string
+-- #      :lastJoin string
+UPDATE playerData
+SET playerUUID = :playerUUID, playerXUID = :playerXUID, playerName = :playerName, lastJoin = :lastJoin
+WHERE playerID = :playerID;
 -- #    }
 -- #    { playerSetting
--- #      :playerUUID string
+-- #      :playerID int
 -- #      :ID string
 -- #      :value string
-INSERT OR REPLACE INTO playerSettings (playerUUID, ID, value)
-VALUES (:playerUUID, :ID, :value);
+INSERT OR REPLACE INTO playerSettings (playerID, ID, value)
+VALUES (:playerID, :ID, :value);
 -- #    }
 -- #    { world
 -- #      :worldName string
 -- #      :worldType string
+-- #      :biomeID int
 -- #      :roadSchematic string
 -- #      :mergeRoadSchematic string
 -- #      :plotSchematic string
@@ -237,31 +268,30 @@ VALUES (:playerUUID, :ID, :value);
 -- #      :groundSize int
 -- #      :roadBlock string
 -- #      :borderBlock string
--- #      :borderBlockOnClaim string
 -- #      :plotFloorBlock string
 -- #      :plotFillBlock string
 -- #      :plotBottomBlock string
 INSERT OR REPLACE INTO worlds (
-    worldName, worldType,
+    worldName,
+    worldType, biomeID,
     roadSchematic, mergeRoadSchematic, plotSchematic,
     roadSize, plotSize, groundSize,
-    roadBlock, borderBlock, borderBlockOnClaim, plotFloorBlock, plotFillBlock, plotBottomBlock
+    roadBlock, borderBlock, plotFloorBlock, plotFillBlock, plotBottomBlock
 ) VALUES (
-    :worldName, :worldType,
+    :worldName,
+    :worldType, :biomeID,
     :roadSchematic, :mergeRoadSchematic, :plotSchematic,
     :roadSize, :plotSize, :groundSize,
-    :roadBlock, :borderBlock, :borderBlockOnClaim, :plotFloorBlock, :plotFillBlock, :plotBottomBlock
+    :roadBlock, :borderBlock, :plotFloorBlock, :plotFillBlock, :plotBottomBlock
 );
 -- #    }
--- #    { plot
+-- #    { plotAlias
 -- #      :worldName string
 -- #      :x int
 -- #      :z int
--- #      :biomeID int
 -- #      :alias string
-INSERT INTO plots (worldName, x, z, biomeID, alias)
-VALUES (:worldName, :x, :z, :biomeID, :alias)
-ON CONFLICT DO UPDATE SET biomeID = excluded.biomeID, alias = excluded.alias;
+INSERT OR REPLACE INTO plotAliases (worldName, x, z, alias)
+VALUES (:worldName, :x, :z, :alias);
 -- #    }
 -- #    { mergePlot
 -- #      :worldName string
@@ -276,11 +306,11 @@ VALUES (:worldName, :originX, :originZ, :mergeX, :mergeZ);
 -- #      :worldName string
 -- #      :x int
 -- #      :z int
--- #      :playerUUID string
+-- #      :playerID int
 -- #      :state string
 -- #      :addTime string
-INSERT INTO plotPlayers (worldName, x, z, playerUUID, state, addTime)
-VALUES (:worldName, :x, :z, :playerUUID, :state, :addTime)
+INSERT INTO plotPlayers (worldName, x, z, playerID, state, addTime)
+VALUES (:worldName, :x, :z, :playerID, :state, :addTime)
 ON CONFLICT DO UPDATE SET state = excluded.state, addTime = excluded.addTime;
 -- #    }
 -- #    { plotFlag
@@ -297,36 +327,57 @@ VALUES (:worldName, :x, :z, :ID, :value);
 -- #      :x int
 -- #      :z int
 -- #      :rate string
--- #      :playerUUID string
+-- #      :playerID int
 -- #      :rateTime string
--- #      :comment string
-INSERT INTO plotRates (worldName, x, z, rate, playerUUID, rateTime, comment)
-VALUES (:worldName, :x, :z, :rate, :playerUUID, :rateTime, :comment)
+-- #      :comment ?string
+INSERT INTO plotRates (worldName, x, z, rate, playerID, rateTime, comment)
+VALUES (:worldName, :x, :z, :rate, :playerID, :rateTime, :comment)
 ON CONFLICT DO UPDATE SET rate = excluded.rate, comment = excluded.comment;
 -- #    }
 -- #  }
 
 -- #  { delete
 -- #    { playerSetting
--- #      :playerUUID string
+-- #      :playerID int
 -- #      :ID string
 DELETE FROM playerSettings
-WHERE playerUUID = :playerUUID AND ID = :ID;
+WHERE playerID = :playerID AND ID = :ID;
 -- #    }
--- #    { plot
+-- #    { plotAliases
 -- #      :worldName string
 -- #      :x int
 -- #      :z int
-DELETE FROM plots
+DELETE FROM plotAliases
+WHERE worldName = :worldName AND x = :x AND z = :z;
+-- #    }
+-- #    { mergePlots
+-- #      :worldName string
+-- #      :originX int
+-- #      :originZ int
+DELETE FROM mergePlots
+WHERE worldName = :worldName AND originX = :originX AND originZ = :originZ;
+-- #    }
+-- #    { plotPlayers
+-- #      :worldName string
+-- #      :x int
+-- #      :z int
+DELETE FROM plotPlayers
 WHERE worldName = :worldName AND x = :x AND z = :z;
 -- #    }
 -- #    { plotPlayer
 -- #      :worldName string
 -- #      :x int
 -- #      :z int
--- #      :playerUUID string
+-- #      :playerID int
 DELETE FROM plotPlayers
-WHERE worldName = :worldName AND x = :x AND z = :z AND playerUUID = :playerUUID;
+WHERE worldName = :worldName AND x = :x AND z = :z AND playerID = :playerID;
+-- #    }
+-- #    { plotFlags
+-- #      :worldName string
+-- #      :x int
+-- #      :z int
+DELETE FROM plotFlags
+WHERE worldName = :worldName AND x = :x AND z = :z;
 -- #    }
 -- #    { plotFlag
 -- #      :worldName string
@@ -335,6 +386,13 @@ WHERE worldName = :worldName AND x = :x AND z = :z AND playerUUID = :playerUUID;
 -- #      :ID string
 DELETE FROM plotFlags
 WHERE worldName = :worldName AND x = :x AND z = :z AND ID = :ID;
+-- #    }
+-- #    { plotRates
+-- #      :worldName string
+-- #      :x int
+-- #      :z int
+DELETE FROM plotRates
+WHERE worldName = :worldName AND x = :x AND z = :z;
 -- #    }
 -- #  }
 -- #}

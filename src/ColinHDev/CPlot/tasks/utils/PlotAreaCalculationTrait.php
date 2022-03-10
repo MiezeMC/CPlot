@@ -1,13 +1,16 @@
 <?php
 
+declare(strict_types=1);
+
 namespace ColinHDev\CPlot\tasks\utils;
 
-use ColinHDev\CPlotAPI\plots\BasePlot;
-use ColinHDev\CPlotAPI\math\Area;
-use ColinHDev\CPlotAPI\plots\Plot;
-use ColinHDev\CPlotAPI\worlds\WorldSettings;
+use ColinHDev\CPlot\math\Area;
+use ColinHDev\CPlot\plots\BasePlot;
+use ColinHDev\CPlot\plots\Plot;
+use ColinHDev\CPlot\worlds\WorldSettings;
 
 trait PlotAreaCalculationTrait {
+    use AreaCalculationTrait;
 
     /**
      * @return Area[]
@@ -17,15 +20,17 @@ trait PlotAreaCalculationTrait {
         /** @var Area[] $areas */
         $areas = [];
 
-        $plots = array_merge([$originPlot], $originPlot->getMergePlots() ?? []);
+        $plots = array_merge([$originPlot], $originPlot->getMergePlots());
         /** @var BasePlot $plot */
         foreach ($plots as $plot) {
-            $plotPosition = $plot->getPositionNonNull($worldSettings->getRoadSize(), $worldSettings->getPlotSize(), $worldSettings->getGroundSize());
+            $plotPosition = $plot->getVector3NonNull($worldSettings->getRoadSize(), $worldSettings->getPlotSize(), $worldSettings->getGroundSize());
+            $plotPositionX = $plotPosition->getFloorX();
+            $plotPositionZ = $plotPosition->getFloorZ();
             $area = new Area(
-                $plotPosition->getFloorX(),
-                $plotPosition->getFloorZ(),
-                ($plotPosition->getFloorX() + $worldSettings->getPlotSize() - 1),
-                ($plotPosition->getFloorZ() + $worldSettings->getPlotSize() - 1),
+                $plotPositionX,
+                $plotPositionZ,
+                ($plotPositionX + $worldSettings->getPlotSize() - 1),
+                ($plotPositionZ + $worldSettings->getPlotSize() - 1),
             );
             $areas[$area->toString()] = $area;
         }

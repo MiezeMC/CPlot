@@ -1,61 +1,68 @@
 <?php
 
+declare(strict_types=1);
+
 namespace ColinHDev\CPlot\commands\subcommands;
 
+use ColinHDev\CPlot\commands\Subcommand;
 use ColinHDev\CPlot\provider\DataProvider;
+use ColinHDev\CPlot\provider\LanguageManager;
+use ColinHDev\CPlot\worlds\generator\PlotGenerator;
+use ColinHDev\CPlot\worlds\WorldSettings;
 use pocketmine\command\CommandSender;
+use pocketmine\math\Vector3;
 use pocketmine\player\Player;
 use pocketmine\Server;
 use pocketmine\world\WorldCreationOptions;
-use pocketmine\math\Vector3;
-use ColinHDev\CPlot\commands\Subcommand;
-use ColinHDev\CPlot\worlds\PlotGenerator;
-use ColinHDev\CPlotAPI\worlds\WorldSettings;
-use poggit\libasynql\SqlError;
 
+/**
+ * @phpstan-extends Subcommand<string>
+ */
 class GenerateSubcommand extends Subcommand {
 
+    /**
+     * @throws \JsonException
+     */
     public function execute(CommandSender $sender, array $args) : \Generator {
         if (count($args) === 0) {
-            $sender->sendMessage($this->getPrefix() . $this->getUsage());
+            yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "generate.usage"]);
             return null;
         }
         $worldName = $args[0];
         if ($sender->getServer()->getWorldManager()->isWorldGenerated($worldName)) {
-            $sender->sendMessage($this->getPrefix() . $this->translateString("generate.worldExists", [$worldName]));
+            yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "generate.worldExists" => $worldName]);
             return null;
         }
 
         $options = new WorldCreationOptions();
         $options->setGeneratorClass(PlotGenerator::class);
         $worldSettings = WorldSettings::fromConfig();
-        $options->setGeneratorOptions(json_encode($worldSettings->toArray()));
+        $worldSettingsArray = $worldSettings->toArray();
+        $worldSettingsArray["worldName"] = $worldName;
+        $options->setGeneratorOptions(json_encode($worldSettingsArray, JSON_THROW_ON_ERROR));
         $options->setSpawnPosition(new Vector3(0, $worldSettings->getGroundSize() + 1, 0));
         if (!Server::getInstance()->getWorldManager()->generateWorld($worldName, $options)) {
-            $sender->sendMessage($this->getPrefix() . $this->translateString("generate.generateError"));
+            yield LanguageManager::getInstance()->getProvider()->awaitMessageSendage($sender, ["prefix", "generate.generateError"]);
             return null;
         }
-        yield from DataProvider::getInstance()->addWorld($worldName, $worldSettings);
+        yield DataProvider::getInstance()->addWorld($worldName, $worldSettings);
         return $worldName;
     }
 
     /**
-     * @param string $worldName
+     * @phpstan-param string $return
      */
-    public function onSuccess(CommandSender $sender, mixed $worldName) : void {
+    public function onSuccess(CommandSender $sender, mixed $return) : void {
         if ($sender instanceof Player && !$sender->isConnected()) {
             return;
         }
-        $sender->sendMessage($this->getPrefix() . $this->translateString("generate.success", [$worldName]));
+        LanguageManager::getInstance()->getProvider()->sendMessage($sender, ["prefix", "generate.success" => $return]);
     }
 
-    /**
-     * @param SqlError $error
-     */
-    public function onError(CommandSender $sender, mixed $error) : void {
+    public function onError(CommandSender $sender, \Throwable $error) : void {
         if ($sender instanceof Player && !$sender->isConnected()) {
             return;
         }
-        $sender->sendMessage($this->getPrefix() . $this->translateString("generate.saveError", [$error->getMessage()]));
+        LanguageManager::getInstance()->getProvider()->sendMessage($sender, ["prefix", "generate.saveError" => $error->getMessage()]);
     }
 }
